@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PinkLink - Link Manager</title>
+
+<!-- Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Segoe UI",Arial,sans-serif}
+:root{
+  --pink:#ec4899;--pink-dark:#db2777;--pink-light:#fce7f3;
+  --pink-soft:#fff1f7;--text:#27272a;--muted:#71717a;
+  --white:#fff;--border:#f3d5e4;--danger:#ef4444;
+  --shadow:0 10px 30px rgba(236,72,153,.12);
+}
+body{background:#fff8fc;color:var(--text);min-height:100vh;transition:.25s}
+body.dark-mode{background:#18181b;color:#f4f4f5}
+body.dark-mode .main-card,body.dark-mode .stat-card,body.dark-mode .link-card,
+body.dark-mode .search input,body.dark-mode .filter,body.dark-mode .modal,
+body.dark-mode .icon-button{background:#27272a;color:#f4f4f5;border-color:#3f3f46}
+body.dark-mode .welcome p,body.dark-mode .description,body.dark-mode .stat-info small{color:#a1a1aa}
+body.dark-mode .url{background:#3f1f31}
+body.dark-mode .copy-btn{background:#3f3f46;color:#e4e4e7}
+body.dark-mode .cancel{background:#3f3f46;color:#fff}
+body.dark-mode .form-group input,body.dark-mode .form-group select,body.dark-mode .form-group textarea{background:#18181b;color:#fff;border-color:#52525b}
+
+.sidebar{position:fixed;left:0;top:0;width:250px;height:100vh;background:linear-gradient(180deg,#ec4899,#db2777);color:#fff;padding:25px 18px;z-index:1000}
+.logo{display:flex;align-items:center;gap:12px;padding:0 10px 35px}
+.logo-icon{width:43px;height:43px;border-radius:13px;background:#fff;color:var(--pink);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:bold}
+.logo h2{font-size:21px}.logo span{font-size:11px;opacity:.8}
+.menu-title{font-size:11px;opacity:.65;padding:0 12px;margin:0 0 10px;text-transform:uppercase;letter-spacing:1px}
+.menu-item{display:flex;align-items:center;gap:13px;padding:13px 14px;border-radius:12px;margin-bottom:6px;cursor:pointer;transition:.2s}
+.menu-item:hover,.menu-item.active{background:rgba(255,255,255,.18)}
+.menu-item span{font-size:14px}
+.sidebar-bottom{position:absolute;bottom:25px;left:18px;right:18px}
+.storage{background:rgba(255,255,255,.12);padding:15px;border-radius:14px;font-size:12px}
+.storage-bar{height:5px;background:rgba(255,255,255,.25);border-radius:10px;margin-top:10px;overflow:hidden}
+.storage-bar div{height:100%;width:0;background:#fff;border-radius:10px;transition:.3s}
+
+.main{margin-left:250px;padding:28px 35px}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px}
+.welcome h1{font-size:26px}.welcome p{color:var(--muted);font-size:14px;margin-top:5px}
+.top-actions{display:flex;align-items:center;gap:12px}
+.icon-button{border:none;background:#fff;width:42px;height:42px;border-radius:12px;cursor:pointer;box-shadow:var(--shadow);font-size:18px}
+.profile{width:42px;height:42px;background:var(--pink-light);color:var(--pink-dark);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold}
+.mobile-menu{display:none;border:none;background:var(--pink);color:#fff;width:42px;height:42px;border-radius:11px;cursor:pointer}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:28px}
+.stat-card{background:#fff;padding:20px;border-radius:18px;box-shadow:var(--shadow);border:1px solid #f9e4ef;display:flex;align-items:center;gap:15px}
+.stat-icon{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:var(--pink-light);font-size:21px}
+.stat-info small{color:var(--muted);font-size:12px}.stat-info h2{margin-top:3px;font-size:24px}
+
+.toolbar{display:flex;justify-content:space-between;gap:15px;margin-bottom:22px}
+.search{flex:1;position:relative}.search input{width:100%;border:1px solid var(--border);background:#fff;padding:14px 18px 14px 45px;border-radius:13px;outline:none;font-size:14px}
+.search input:focus{border-color:var(--pink);box-shadow:0 0 0 3px var(--pink-light)}
+.search-icon{position:absolute;left:17px;top:13px}
+.btn{border:none;border-radius:13px;padding:0 20px;cursor:pointer;font-weight:600;transition:.2s}
+.btn-primary{background:var(--pink);color:#fff;box-shadow:0 8px 20px rgba(236,72,153,.25)}
+.btn-primary:hover{background:var(--pink-dark);transform:translateY(-2px)}
+
+.section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}
+.section-header h2{font-size:18px}.filter{border:1px solid var(--border);background:#fff;padding:8px 12px;border-radius:9px;outline:none}
+.links-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.link-card{background:#fff;border:1px solid #f5dce9;border-radius:18px;padding:19px;box-shadow:0 6px 20px rgba(0,0,0,.04);transition:.25s;position:relative}
+.link-card:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:#f2b6d3}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start}
+.platform-icon{width:44px;height:44px;border-radius:13px;background:var(--pink-light);display:flex;align-items:center;justify-content:center;font-size:21px}
+.favorite{border:none;background:transparent;cursor:pointer;font-size:20px;color:#d4d4d8}.favorite.active{color:#f59e0b}
+.link-card h3{margin-top:15px;font-size:16px}.description{font-size:12px;color:var(--muted);margin-top:5px;min-height:30px}
+.url{display:block;margin-top:12px;padding:9px;background:#fff7fb;color:var(--pink-dark);border-radius:9px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{display:inline-block;margin-top:12px;background:var(--pink-light);color:var(--pink-dark);padding:5px 9px;border-radius:20px;font-size:10px;font-weight:600}
+.card-actions{display:flex;gap:7px;margin-top:15px}
+.card-actions button{flex:1;border:none;padding:9px;border-radius:9px;cursor:pointer;font-size:12px;font-weight:600}
+.open-btn{background:var(--pink);color:#fff}.copy-btn{background:#f4f4f5;color:#52525b}.edit-btn{background:#fce7f3;color:var(--pink-dark)}
+.delete-btn{width:100%;margin-top:8px;border:none;background:none;color:#ef4444;cursor:pointer;font-size:11px}
+
+.empty{grid-column:1/-1;background:#fff;padding:60px 20px;text-align:center;border-radius:18px;border:1px dashed #e9a8c6}
+.empty-icon{font-size:45px;margin-bottom:10px}.empty p{color:var(--muted);font-size:13px;margin-top:5px}
+.loading{grid-column:1/-1;text-align:center;padding:50px;color:var(--muted)}
+
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(24,24,27,.45);backdrop-filter:blur(5px);align-items:center;justify-content:center;z-index:2000;padding:20px}
+.modal-overlay.show{display:flex}.modal{background:#fff;width:100%;max-width:500px;border-radius:22px;padding:27px;animation:popup .25s ease}
+@keyframes popup{from{opacity:0;transform:translateY(15px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}.modal-header h2{font-size:20px}
+.close{border:none;background:#f4f4f5;width:34px;height:34px;border-radius:9px;cursor:pointer}
+.form-group{margin-bottom:15px}.form-group label{display:block;font-size:13px;font-weight:600;margin-bottom:7px}
+.form-group input,.form-group select,.form-group textarea{width:100%;border:1px solid #e4e4e7;border-radius:10px;padding:12px;outline:none;font-size:13px}
+.form-group textarea{resize:vertical;min-height:75px}.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--pink);box-shadow:0 0 0 3px var(--pink-light)}
+.modal-buttons{display:flex;gap:10px;margin-top:20px}.cancel,.save{flex:1;padding:12px;border:none;border-radius:10px;cursor:pointer}
+.cancel{background:#f4f4f5}.save{background:var(--pink);color:#fff;font-weight:600}
+
+.toast{position:fixed;right:25px;bottom:25px;background:#27272a;color:#fff;padding:13px 18px;border-radius:12px;font-size:13px;opacity:0;transform:translateY(20px);pointer-events:none;transition:.3s;z-index:3000}
+.toast.show{opacity:1;transform:translateY(0)}
+
+@media(max-width:1100px){.links-grid{grid-template-columns:repeat(2,1fr)}.stats{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%);transition:.3s}.sidebar.open{transform:translateX(0)}
+  .main{margin-left:0;padding:20px}.mobile-menu{display:block}.topbar{gap:12px}
+  .welcome h1{font-size:21px}.welcome p{font-size:12px}.stats{grid-template-columns:repeat(2,1fr)}
+  .links-grid{grid-template-columns:1fr}.toolbar{flex-direction:column}.btn-primary{height:45px}
+}
+@media(max-width:480px){
+  .stats{grid-template-columns:1fr 1fr;gap:10px}.stat-card{padding:14px}.stat-icon{width:38px;height:38px;font-size:16px}
+  .stat-info h2{font-size:19px}.stat-info small{font-size:10px}.profile{display:none}.main{padding:15px}
+}
+</style>
+</head>
+
+<body>
+
+<aside class="sidebar" id="sidebar">
+  <div class="logo">
+    <div class="logo-icon">♡</div>
+    <div><h2>PinkLink</h2><span>Link Manager</span></div>
+  </div>
+
+  <div class="menu-title">MENU</div>
+  <div class="menu-item active" onclick="showAll()"><b>⌂</b><span>Dashboard</span></div>
+  <div class="menu-item" onclick="showFavorites()"><b>★</b><span>Favorit</span></div>
+  <div class="menu-item" onclick="filterCategory('Canva')"><b>🎨</b><span>Canva</span></div>
+  <div class="menu-item" onclick="filterCategory('Dokumen')"><b>📄</b><span>Dokumen</span></div>
+  <div class="menu-item" onclick="filterCategory('Website')"><b>🌐</b><span>Website</span></div>
+  <div class="menu-item" onclick="filterCategory('Video')"><b>▶️</b><span>Video</span></div>
+  <div class="menu-item" onclick="filterCategory('Lainnya')"><b>🔗</b><span>Lainnya</span></div>
+
+  <div class="menu-title" style="margin-top:25px">DATA</div>
+  <div class="menu-item" onclick="exportData()"><b>↑</b><span>Export Data</span></div>
+  <div class="menu-item" onclick="document.getElementById('importFile').click()"><b>↓</b><span>Import Data</span></div>
+  <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+
+  <div class="sidebar-bottom">
+    <div class="storage">
+      <div style="display:flex;justify-content:space-between"><span>Database</span><span id="storageText">0 link</span></div>
+      <div class="storage-bar"><div id="storageBar"></div></div>
+    </div>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <button class="mobile-menu" onclick="toggleSidebar()">☰</button>
+    <div class="welcome">
+      <h1>Selamat datang, Fitri! 👋</h1>
+      <p>Kelola semua link pentingmu dalam satu tempat.</p>
+    </div>
+    <div class="top-actions">
+      <button class="icon-button" onclick="toggleDarkMode()" title="Mode tampilan">◐</button>
+      <div class="profile">F</div>
+    </div>
+  </div>
+
+  <section class="stats">
+    <div class="stat-card"><div class="stat-icon">🔗</div><div class="stat-info"><small>Total Link</small><h2 id="totalLinks">0</h2></div></div>
+    <div class="stat-card"><div class="stat-icon">⭐</div><div class="stat-info"><small>Favorit</small><h2 id="totalFavorites">0</h2></div></div>
+    <div class="stat-card"><div class="stat-icon">🎨</div><div class="stat-info"><small>Canva</small><h2 id="totalCanva">0</h2></div></div>
+    <div class="stat-card"><div class="stat-icon">📂</div><div class="stat-info"><small>Kategori</small><h2 id="totalCategories">0</h2></div></div>
+  </section>
+
+  <section class="toolbar">
+    <div class="search">
+      <span class="search-icon">🔎</span>
+      <input type="text" id="searchInput" placeholder="Cari nama link, kategori, atau URL..." oninput="searchLinks()">
+    </div>
+    <button class="btn btn-primary" onclick="openModal()">＋ Tambah Link</button>
+  </section>
+
+  <section>
+    <div class="section-header">
+      <h2 id="sectionTitle">Semua Link</h2>
+      <select class="filter" id="categoryFilter" onchange="filterBySelect()">
+        <option value="Semua">Semua Kategori</option>
+        <option value="Canva">Canva</option>
+        <option value="Dokumen">Dokumen</option>
+        <option value="Website">Website</option>
+        <option value="Video">Video</option>
+        <option value="Lainnya">Lainnya</option>
+      </select>
+    </div>
+    <div class="links-grid" id="linksGrid"></div>
+  </section>
+</main>
+
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">Tambah Link</h2>
+      <button class="close" onclick="closeModal()">✕</button>
+    </div>
+
+    <form id="linkForm">
+      <input type="hidden" id="editId">
+
+      <div class="form-group">
+        <label>Nama Link</label>
+        <input type="text" id="linkName" placeholder="Contoh: Canva Presentasi" required>
+      </div>
+
+      <div class="form-group">
+        <label>URL Link</label>
+        <input type="url" id="linkUrl" placeholder="https://..." required>
+      </div>
+
+      <div class="form-group">
+        <label>Kategori</label>
+        <select id="linkCategory">
+          <option value="Canva">🎨 Canva</option>
+          <option value="Dokumen">📄 Dokumen</option>
+          <option value="Website">🌐 Website</option>
+          <option value="Video">▶️ Video</option>
+          <option value="Lainnya">🔗 Lainnya</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Deskripsi</label>
+        <textarea id="linkDescription" placeholder="Tambahkan keterangan..."></textarea>
+      </div>
+
+      <div class="modal-buttons">
+        <button type="button" class="cancel" onclick="closeModal()">Batal</button>
+        <button type="submit" class="save" id="saveButton">Simpan Link</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   PINKLINK + SUPABASE
+   Ganti hanya nilai SUPABASE_PUBLISHABLE_KEY.
+   Jangan gunakan Secret Key.
+   ========================================================= */
+
+const SUPABASE_URL = "https://gagjkpuwkyekpwwbyxit.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_wWMNIhmTIU3N7wKpGq4T5g_prxBfMcv";
+
+const { createClient } = window.supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+let links = [];
+let currentFilter = "Semua";
+let favoriteOnly = false;
+
+function getIcon(category){
+  const icons={Canva:"🎨",Dokumen:"📄",Website:"🌐",Video:"▶️",Lainnya:"🔗"};
+  return icons[category] || "🔗";
+}
+
+function escapeHTML(text){
+  const div=document.createElement("div");
+  div.textContent=text ?? "";
+  return div.innerHTML;
+}
+
+function safeUrl(url){
+  try{
+    const parsed=new URL(url);
+    if(parsed.protocol==="http:" || parsed.protocol==="https:") return parsed.href;
+  }catch(e){}
+  return "#";
+}
+
+async function loadLinks(){
+  const grid=document.getElementById("linksGrid");
+  grid.innerHTML='<div class="loading">⏳ Mengambil data dari Supabase...</div>';
+
+  const {data,error}=await db
+    .from("links")
+    .select("*")
+    .order("created_at",{ascending:false});
+
+  if(error){
+    console.error(error);
+    grid.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><h3>Gagal mengambil data</h3><p>Periksa Project URL, Publishable Key, tabel links, dan policy RLS Supabase.</p></div>';
+    showToast("Gagal terhubung ke Supabase");
+    return;
+  }
+
+  links=data || [];
+  renderLinks();
+}
+
+function renderLinks(){
+  const grid=document.getElementById("linksGrid");
+  let filtered=[...links];
+
+  if(currentFilter!=="Semua") filtered=filtered.filter(x=>x.category===currentFilter);
+  if(favoriteOnly) filtered=filtered.filter(x=>x.favorite===true);
+
+  const search=(document.getElementById("searchInput").value||"").toLowerCase().trim();
+  if(search){
+    filtered=filtered.filter(x=>
+      (x.name||"").toLowerCase().includes(search) ||
+      (x.url||"").toLowerCase().includes(search) ||
+      (x.category||"").toLowerCase().includes(search) ||
+      (x.description||"").toLowerCase().includes(search)
+    );
+  }
+
+  if(!filtered.length){
+    grid.innerHTML='<div class="empty"><div class="empty-icon">🔗</div><h3>Belum ada link</h3><p>Tambahkan link pertamamu untuk mulai mengelola koleksi link.</p></div>';
+    updateStats();
+    return;
+  }
+
+  grid.innerHTML=filtered.map(link=>{
+    const url=safeUrl(link.url);
+    const encoded=encodeURIComponent(link.url||"");
+    return `
+      <div class="link-card">
+        <div class="card-top">
+          <div class="platform-icon">${getIcon(link.category)}</div>
+          <button class="favorite ${link.favorite?"active":""}" onclick="toggleFavorite(${link.id})" title="Favorit">${link.favorite?"★":"☆"}</button>
+        </div>
+        <h3>${escapeHTML(link.name)}</h3>
+        <p class="description">${escapeHTML(link.description||"Tidak ada deskripsi.")}</p>
+        <span class="url" title="${escapeHTML(link.url)}">${escapeHTML(link.url)}</span>
+        <span class="tag">${escapeHTML(link.category)}</span>
+        <div class="card-actions">
+          <button class="open-btn" onclick="openLink('${encoded}')">Buka</button>
+          <button class="copy-btn" onclick="copyLink('${encoded}')">Salin</button>
+          <button class="edit-btn" onclick="editLink(${link.id})">Edit</button>
+        </div>
+        <button class="delete-btn" onclick="deleteLink(${link.id})">🗑 Hapus</button>
+      </div>`;
+  }).join("");
+
+  updateStats();
+}
+
+document.getElementById("linkForm").addEventListener("submit", async function(event){
+  event.preventDefault();
+
+  const id=document.getElementById("editId").value;
+  const data={
+    name:document.getElementById("linkName").value.trim(),
+    url:document.getElementById("linkUrl").value.trim(),
+    category:document.getElementById("linkCategory").value,
+    description:document.getElementById("linkDescription").value.trim()
+  };
+
+  if(!data.name || !data.url){
+    showToast("Nama dan URL wajib diisi");
+    return;
+  }
+
+  const saveButton=document.getElementById("saveButton");
+  saveButton.disabled=true;
+  saveButton.textContent="Menyimpan...";
+
+  try{
+    if(id){
+      const {error}=await db.from("links").update(data).eq("id",Number(id));
+      if(error) throw error;
+      showToast("Link berhasil diperbarui ✓");
+    }else{
+      const {error}=await db.from("links").insert({...data,favorite:false});
+      if(error) throw error;
+      showToast("Link berhasil ditambahkan ✓");
+    }
+
+    closeModal();
+    await loadLinks();
+  }catch(error){
+    console.error(error);
+    showToast("Gagal menyimpan link");
+  }finally{
+    saveButton.disabled=false;
+    saveButton.textContent="Simpan Link";
+  }
+});
+
+function openModal(){
+  document.getElementById("modalOverlay").classList.add("show");
+  document.getElementById("modalTitle").textContent="Tambah Link";
+  document.getElementById("linkForm").reset();
+  document.getElementById("editId").value="";
+}
+
+function closeModal(){
+  document.getElementById("modalOverlay").classList.remove("show");
+}
+
+function closeModalOutside(event){
+  if(event.target.id==="modalOverlay") closeModal();
+}
+
+function editLink(id){
+  const link=links.find(x=>Number(x.id)===Number(id));
+  if(!link) return;
+
+  document.getElementById("modalOverlay").classList.add("show");
+  document.getElementById("modalTitle").textContent="Edit Link";
+  document.getElementById("editId").value=link.id;
+  document.getElementById("linkName").value=link.name||"";
+  document.getElementById("linkUrl").value=link.url||"";
+  document.getElementById("linkCategory").value=link.category||"Lainnya";
+  document.getElementById("linkDescription").value=link.description||"";
+}
+
+async function deleteLink(id){
+  const link=links.find(x=>Number(x.id)===Number(id));
+  if(!link) return;
+  if(!confirm(`Hapus "${link.name}"?`)) return;
+
+  const {error}=await db.from("links").delete().eq("id",Number(id));
+  if(error){
+    console.error(error);
+    showToast("Gagal menghapus link");
+    return;
+  }
+
+  showToast("Link berhasil dihapus ✓");
+  await loadLinks();
+}
+
+async function toggleFavorite(id){
+  const link=links.find(x=>Number(x.id)===Number(id));
+  if(!link) return;
+
+  const newValue=!Boolean(link.favorite);
+  const {error}=await db.from("links").update({favorite:newValue}).eq("id",Number(id));
+
+  if(error){
+    console.error(error);
+    showToast("Gagal mengubah favorit");
+    return;
+  }
+
+  showToast(newValue ? "Ditambahkan ke favorit ⭐" : "Dihapus dari favorit");
+  await loadLinks();
+}
+
+function openLink(encodedUrl){
+  const url=safeUrl(decodeURIComponent(encodedUrl));
+  if(url==="#"){
+    showToast("URL tidak valid");
+    return;
+  }
+  window.open(url,"_blank","noopener,noreferrer");
+}
+
+async function copyLink(encodedUrl){
+  const url=decodeURIComponent(encodedUrl);
+  try{
+    await navigator.clipboard.writeText(url);
+    showToast("Link berhasil disalin ✓");
+  }catch(e){
+    showToast("Gagal menyalin link");
+  }
+}
+
+function searchLinks(){renderLinks();}
+
+function filterCategory(category){
+  currentFilter=category;
+  favoriteOnly=false;
+  document.getElementById("sectionTitle").textContent=category==="Semua"?"Semua Link":category;
+  document.getElementById("categoryFilter").value=category;
+  renderLinks();
+  closeSidebarMobile();
+}
+
+function filterBySelect(){
+  const value=document.getElementById("categoryFilter").value;
+  currentFilter=value;
+  favoriteOnly=false;
+  document.getElementById("sectionTitle").textContent=value==="Semua"?"Semua Link":value;
+  renderLinks();
+}
+
+function showAll(){
+  currentFilter="Semua";
+  favoriteOnly=false;
+  document.getElementById("sectionTitle").textContent="Semua Link";
+  document.getElementById("categoryFilter").value="Semua";
+  setActiveMenu(0);
+  renderLinks();
+  closeSidebarMobile();
+}
+
+function showFavorites(){
+  currentFilter="Semua";
+  favoriteOnly=true;
+  document.getElementById("sectionTitle").textContent="Link Favorit";
+  setActiveMenu(1);
+  renderLinks();
+  closeSidebarMobile();
+}
+
+function setActiveMenu(index){
+  document.querySelectorAll(".menu-item").forEach(x=>x.classList.remove("active"));
+  const items=document.querySelectorAll(".menu-item");
+  if(items[index]) items[index].classList.add("active");
+}
+
+function updateStats(){
+  document.getElementById("totalLinks").textContent=links.length;
+  document.getElementById("totalFavorites").textContent=links.filter(x=>x.favorite).length;
+  document.getElementById("totalCanva").textContent=links.filter(x=>x.category==="Canva").length;
+  document.getElementById("totalCategories").textContent=new Set(links.map(x=>x.category)).size;
+  document.getElementById("storageText").textContent=`${links.length} link`;
+  document.getElementById("storageBar").style.width=Math.min(links.length*5,100)+"%";
+}
+
+function exportData(){
+  const data=JSON.stringify(links,null,2);
+  const blob=new Blob([data],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download="pinklink-data.json";
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast("Data berhasil diekspor ✓");
+}
+
+async function importData(event){
+  const file=event.target.files[0];
+  if(!file) return;
+
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      const imported=JSON.parse(e.target.result);
+      if(!Array.isArray(imported)) throw new Error("Format JSON tidak valid");
+
+      const clean=imported.map(x=>({
+        name:String(x.name||"Tanpa Nama").trim(),
+        url:String(x.url||"").trim(),
+        category:["Canva","Dokumen","Website","Video","Lainnya"].includes(x.category)?x.category:"Lainnya",
+        description:String(x.description||"").trim(),
+        favorite:Boolean(x.favorite)
+      })).filter(x=>x.url);
+
+      if(!clean.length) throw new Error("Tidak ada data valid");
+
+      const {error}=await db.from("links").insert(clean);
+      if(error) throw error;
+
+      showToast(`${clean.length} link berhasil diimport ✓`);
+      await loadLinks();
+    }catch(error){
+      console.error(error);
+      showToast("File JSON tidak valid atau gagal diimport");
+    }finally{
+      event.target.value="";
+    }
+  };
+  reader.readAsText(file);
+}
+
+function showToast(message){
+  const toast=document.getElementById("toast");
+  toast.textContent=message;
+  toast.classList.add("show");
+  clearTimeout(window.toastTimer);
+  window.toastTimer=setTimeout(()=>toast.classList.remove("show"),2500);
+}
+
+function toggleSidebar(){
+  document.getElementById("sidebar").classList.toggle("open");
+}
+
+function closeSidebarMobile(){
+  document.getElementById("sidebar").classList.remove("open");
+}
+
+function toggleDarkMode(){
+  document.body.classList.toggle("dark-mode");
+  localStorage.setItem("pinklinkDark",document.body.classList.contains("dark-mode")?"1":"0");
+  showToast("Mode tampilan diubah");
+}
+
+if(localStorage.getItem("pinklinkDark")==="1"){
+  document.body.classList.add("dark-mode");
+}
+
+/* Mulai mengambil data dari Supabase */
+loadLinks();
+</script>
+</body>
+</html>
