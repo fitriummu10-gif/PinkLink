@@ -126,10 +126,10 @@ body.dark-mode .form-group input,body.dark-mode .form-group select,body.dark-mod
   <div class="menu-item" onclick="filterCategory('Video')"><b>▶️</b><span>Video</span></div>
   <div class="menu-item" onclick="filterCategory('Lainnya')"><b>🔗</b><span>Lainnya</span></div>
 
-  <div class="menu-title" style="margin-top:25px">DATA</div>
+  <div id="adminMenu" style="display:none"><div class="menu-title" style="margin-top:25px">DATA</div>
   <div class="menu-item" onclick="exportData()"><b>↑</b><span>Export Data</span></div>
   <div class="menu-item" onclick="document.getElementById('importFile').click()"><b>↓</b><span>Import Data</span></div>
-  <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+  <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)"></div>
 
   <div class="sidebar-bottom">
     <div class="storage">
@@ -143,12 +143,14 @@ body.dark-mode .form-group input,body.dark-mode .form-group select,body.dark-mod
   <div class="topbar">
     <button class="mobile-menu" onclick="toggleSidebar()">☰</button>
     <div class="welcome">
-      <h1>Selamat datang 👋</h1>
-      <p>Kelola semua link pentingmu dalam satu tempat.</p>
+      <h1>Selamat datang!!👋</h1>
+      <p id="welcomeText">Mode Pengunjung • hanya dapat melihat dan membuka link.</p>
     </div>
     <div class="top-actions">
       <button class="icon-button" onclick="toggleDarkMode()" title="Mode tampilan">◐</button>
-      <div class="profile">F</div>
+      <button id="loginButton" onclick="openLogin()" style="border:none;background:#ec4899;color:#fff;padding:10px 14px;border-radius:12px;font-weight:600;cursor:pointer">🔐 Login</button>
+      <button id="logoutButton" onclick="logout()" style="display:none;border:none;background:#fff;color:#db2777;padding:10px 14px;border-radius:12px;font-weight:600;cursor:pointer">Keluar</button>
+      <div class="profile" id="profile">👤</div>
     </div>
   </div>
 
@@ -164,7 +166,7 @@ body.dark-mode .form-group input,body.dark-mode .form-group select,body.dark-mod
       <span class="search-icon">🔎</span>
       <input type="text" id="searchInput" placeholder="Cari nama link, kategori, atau URL..." oninput="searchLinks()">
     </div>
-    <button class="btn btn-primary" onclick="openModal()">＋ Tambah Link</button>
+    <button class="btn btn-primary" id="addButton" onclick="openModal()" style="display:none">＋ Tambah Link</button>
   </section>
 
   <section>
@@ -182,6 +184,19 @@ body.dark-mode .form-group input,body.dark-mode .form-group select,body.dark-mod
     <div class="links-grid" id="linksGrid"></div>
   </section>
 </main>
+
+<div class="modal-overlay" id="loginOverlay">
+  <div class="modal">
+    <div class="modal-header"><h2>Login Pemilik</h2><button class="close" onclick="closeLogin()">✕</button></div>
+    <div style="background:#fce7f3;color:#db2777;padding:11px;border-radius:10px;font-size:12px;margin-bottom:15px">🔐 Hanya pemilik yang login dapat menambah, mengedit, menghapus, dan mengelola favorit.</div>
+    <form id="loginForm">
+      <div class="form-group"><label>Email</label><input type="email" id="loginEmail" placeholder="Email pemilik" required></div>
+      <div class="form-group"><label>Password</label><input type="password" id="loginPassword" placeholder="Password" required></div>
+      <div id="loginError" style="display:none;color:#dc2626;font-size:12px;margin-top:8px"></div>
+      <div class="modal-buttons"><button type="button" class="cancel" onclick="closeLogin()">Batal</button><button type="submit" class="save" id="loginSubmit">Login</button></div>
+    </form>
+  </div>
+</div>
 
 <div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
   <div class="modal">
@@ -230,273 +245,42 @@ body.dark-mode .form-group input,body.dark-mode .form-group select,body.dark-mod
 <div class="toast" id="toast"></div>
 
 <script>
-/* =========================================================
-   PINKLINK + SUPABASE
-   Ganti hanya nilai SUPABASE_PUBLISHABLE_KEY.
-   Jangan gunakan Secret Key.
-   ========================================================= */
-
 const SUPABASE_URL = "https://gagjkpuwkyekpwwbyxit.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_wWMNIhmTIU3N7wKpGq4T5g_prxBfMcv";
-
 const { createClient } = window.supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-let links = [];
-let currentFilter = "Semua";
-let favoriteOnly = false;
+let links=[];
+let currentFilter="Semua";
+let favoriteOnly=false;
+let currentUser=null;
 
-function getIcon(category){
-  const icons={Canva:"🎨",Dokumen:"📄",Website:"🌐",Video:"▶️",Lainnya:"🔗"};
-  return icons[category] || "🔗";
-}
-
-function escapeHTML(text){
-  const div=document.createElement("div");
-  div.textContent=text ?? "";
-  return div.innerHTML;
-}
-
-function safeUrl(url){
-  try{
-    const parsed=new URL(url);
-    if(parsed.protocol==="http:" || parsed.protocol==="https:") return parsed.href;
-  }catch(e){}
-  return "#";
-}
+function getIcon(category){return ({Canva:"🎨",Dokumen:"📄",Website:"🌐",Video:"▶️",Lainnya:"🔗"})[category]||"🔗";}
+function escapeHTML(text){const d=document.createElement("div");d.textContent=text??"";return d.innerHTML;}
+function safeUrl(url){try{const u=new URL(url);return ["http:","https:"].includes(u.protocol)?u.href:"#";}catch{return "#";}}
 
 async function loadLinks(){
   const grid=document.getElementById("linksGrid");
-  grid.innerHTML='<div class="loading">⏳ Mengambil data dari Supabase...</div>';
-
-  const {data,error}=await db
-    .from("links")
-    .select("*")
-    .order("created_at",{ascending:false});
-
-  if(error){
-    console.error(error);
-    grid.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><h3>Gagal mengambil data</h3><p>Periksa Project URL, Publishable Key, tabel links, dan policy RLS Supabase.</p></div>';
-    showToast("Gagal terhubung ke Supabase");
-    return;
-  }
-
-  links=data || [];
-  renderLinks();
+  grid.innerHTML='<div class="loading">⏳ Memuat link...</div>';
+  const {data,error}=await db.from("links").select("*").order("created_at",{ascending:false});
+  if(error){console.error(error);grid.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><h3>Gagal memuat link</h3><p>Periksa koneksi Supabase, tabel links, dan RLS.</p></div>';return;}
+  links=data||[];renderLinks();
 }
 
 function renderLinks(){
-  const grid=document.getElementById("linksGrid");
   let filtered=[...links];
-
   if(currentFilter!=="Semua") filtered=filtered.filter(x=>x.category===currentFilter);
   if(favoriteOnly) filtered=filtered.filter(x=>x.favorite===true);
-
-  const search=(document.getElementById("searchInput").value||"").toLowerCase().trim();
-  if(search){
-    filtered=filtered.filter(x=>
-      (x.name||"").toLowerCase().includes(search) ||
-      (x.url||"").toLowerCase().includes(search) ||
-      (x.category||"").toLowerCase().includes(search) ||
-      (x.description||"").toLowerCase().includes(search)
-    );
-  }
-
-  if(!filtered.length){
-    grid.innerHTML='<div class="empty"><div class="empty-icon">🔗</div><h3>Belum ada link</h3><p>Tambahkan link pertamamu untuk mulai mengelola koleksi link.</p></div>';
-    updateStats();
-    return;
-  }
-
+  const q=(document.getElementById("searchInput").value||"").toLowerCase().trim();
+  if(q) filtered=filtered.filter(x=>(x.name||"").toLowerCase().includes(q)||(x.url||"").toLowerCase().includes(q)||(x.category||"").toLowerCase().includes(q)||(x.description||"").toLowerCase().includes(q));
+  const grid=document.getElementById("linksGrid");
+  if(!filtered.length){grid.innerHTML='<div class="empty"><div class="empty-icon">🔗</div><h3>Belum ada link</h3><p>Link yang tersedia akan tampil di sini.</p></div>';updateStats();return;}
+  const admin=!!currentUser;
   grid.innerHTML=filtered.map(link=>{
-    const url=safeUrl(link.url);
-    const encoded=encodeURIComponent(link.url||"");
-    return `
-      <div class="link-card">
-        <div class="card-top">
-          <div class="platform-icon">${getIcon(link.category)}</div>
-          <button class="favorite ${link.favorite?"active":""}" onclick="toggleFavorite(${link.id})" title="Favorit">${link.favorite?"★":"☆"}</button>
-        </div>
-        <h3>${escapeHTML(link.name)}</h3>
-        <p class="description">${escapeHTML(link.description||"Tidak ada deskripsi.")}</p>
-        <span class="url" title="${escapeHTML(link.url)}">${escapeHTML(link.url)}</span>
-        <span class="tag">${escapeHTML(link.category)}</span>
-        <div class="card-actions">
-          <button class="open-btn" onclick="openLink('${encoded}')">Buka</button>
-          <button class="copy-btn" onclick="copyLink('${encoded}')">Salin</button>
-          <button class="edit-btn" onclick="editLink(${link.id})">Edit</button>
-        </div>
-        <button class="delete-btn" onclick="deleteLink(${link.id})">🗑 Hapus</button>
-      </div>`;
+    const enc=encodeURIComponent(link.url||"");
+    return `<div class="link-card"><div class="card-top"><div class="platform-icon">${getIcon(link.category)}</div>${admin?`<button class="favorite ${link.favorite?"active":""}" onclick="toggleFavorite(${link.id})">${link.favorite?"★":"☆"}</button>`:""}</div><h3>${escapeHTML(link.name)}</h3><p class="description">${escapeHTML(link.description||"Tidak ada deskripsi.")}</p><span class="url">${escapeHTML(link.url)}</span><span class="tag">${escapeHTML(link.category)}</span><div class="card-actions"><button class="open-btn" onclick="openLink('${enc}')">Buka</button><button class="copy-btn" onclick="copyLink('${enc}')">Salin</button>${admin?`<button class="edit-btn" onclick="editLink(${link.id})">Edit</button>`:""}</div>${admin?`<button class="delete-btn" onclick="deleteLink(${link.id})">🗑 Hapus</button>`:""}</div>`;
   }).join("");
-
   updateStats();
-}
-
-document.getElementById("linkForm").addEventListener("submit", async function(event){
-  event.preventDefault();
-
-  const id=document.getElementById("editId").value;
-  const data={
-    name:document.getElementById("linkName").value.trim(),
-    url:document.getElementById("linkUrl").value.trim(),
-    category:document.getElementById("linkCategory").value,
-    description:document.getElementById("linkDescription").value.trim()
-  };
-
-  if(!data.name || !data.url){
-    showToast("Nama dan URL wajib diisi");
-    return;
-  }
-
-  const saveButton=document.getElementById("saveButton");
-  saveButton.disabled=true;
-  saveButton.textContent="Menyimpan...";
-
-  try{
-    if(id){
-      const {error}=await db.from("links").update(data).eq("id",Number(id));
-      if(error) throw error;
-      showToast("Link berhasil diperbarui ✓");
-    }else{
-      const {error}=await db.from("links").insert({...data,favorite:false});
-      if(error) throw error;
-      showToast("Link berhasil ditambahkan ✓");
-    }
-
-    closeModal();
-    await loadLinks();
-  }catch(error){
-    console.error(error);
-    showToast("Gagal menyimpan link");
-  }finally{
-    saveButton.disabled=false;
-    saveButton.textContent="Simpan Link";
-  }
-});
-
-function openModal(){
-  document.getElementById("modalOverlay").classList.add("show");
-  document.getElementById("modalTitle").textContent="Tambah Link";
-  document.getElementById("linkForm").reset();
-  document.getElementById("editId").value="";
-}
-
-function closeModal(){
-  document.getElementById("modalOverlay").classList.remove("show");
-}
-
-function closeModalOutside(event){
-  if(event.target.id==="modalOverlay") closeModal();
-}
-
-function editLink(id){
-  const link=links.find(x=>Number(x.id)===Number(id));
-  if(!link) return;
-
-  document.getElementById("modalOverlay").classList.add("show");
-  document.getElementById("modalTitle").textContent="Edit Link";
-  document.getElementById("editId").value=link.id;
-  document.getElementById("linkName").value=link.name||"";
-  document.getElementById("linkUrl").value=link.url||"";
-  document.getElementById("linkCategory").value=link.category||"Lainnya";
-  document.getElementById("linkDescription").value=link.description||"";
-}
-
-async function deleteLink(id){
-  const link=links.find(x=>Number(x.id)===Number(id));
-  if(!link) return;
-  if(!confirm(`Hapus "${link.name}"?`)) return;
-
-  const {error}=await db.from("links").delete().eq("id",Number(id));
-  if(error){
-    console.error(error);
-    showToast("Gagal menghapus link");
-    return;
-  }
-
-  showToast("Link berhasil dihapus ✓");
-  await loadLinks();
-}
-
-async function toggleFavorite(id){
-  const link=links.find(x=>Number(x.id)===Number(id));
-  if(!link) return;
-
-  const newValue=!Boolean(link.favorite);
-  const {error}=await db.from("links").update({favorite:newValue}).eq("id",Number(id));
-
-  if(error){
-    console.error(error);
-    showToast("Gagal mengubah favorit");
-    return;
-  }
-
-  showToast(newValue ? "Ditambahkan ke favorit ⭐" : "Dihapus dari favorit");
-  await loadLinks();
-}
-
-function openLink(encodedUrl){
-  const url=safeUrl(decodeURIComponent(encodedUrl));
-  if(url==="#"){
-    showToast("URL tidak valid");
-    return;
-  }
-  window.open(url,"_blank","noopener,noreferrer");
-}
-
-async function copyLink(encodedUrl){
-  const url=decodeURIComponent(encodedUrl);
-  try{
-    await navigator.clipboard.writeText(url);
-    showToast("Link berhasil disalin ✓");
-  }catch(e){
-    showToast("Gagal menyalin link");
-  }
-}
-
-function searchLinks(){renderLinks();}
-
-function filterCategory(category){
-  currentFilter=category;
-  favoriteOnly=false;
-  document.getElementById("sectionTitle").textContent=category==="Semua"?"Semua Link":category;
-  document.getElementById("categoryFilter").value=category;
-  renderLinks();
-  closeSidebarMobile();
-}
-
-function filterBySelect(){
-  const value=document.getElementById("categoryFilter").value;
-  currentFilter=value;
-  favoriteOnly=false;
-  document.getElementById("sectionTitle").textContent=value==="Semua"?"Semua Link":value;
-  renderLinks();
-}
-
-function showAll(){
-  currentFilter="Semua";
-  favoriteOnly=false;
-  document.getElementById("sectionTitle").textContent="Semua Link";
-  document.getElementById("categoryFilter").value="Semua";
-  setActiveMenu(0);
-  renderLinks();
-  closeSidebarMobile();
-}
-
-function showFavorites(){
-  currentFilter="Semua";
-  favoriteOnly=true;
-  document.getElementById("sectionTitle").textContent="Link Favorit";
-  setActiveMenu(1);
-  renderLinks();
-  closeSidebarMobile();
-}
-
-function setActiveMenu(index){
-  document.querySelectorAll(".menu-item").forEach(x=>x.classList.remove("active"));
-  const items=document.querySelectorAll(".menu-item");
-  if(items[index]) items[index].classList.add("active");
 }
 
 function updateStats(){
@@ -508,81 +292,70 @@ function updateStats(){
   document.getElementById("storageBar").style.width=Math.min(links.length*5,100)+"%";
 }
 
-function exportData(){
-  const data=JSON.stringify(links,null,2);
-  const blob=new Blob([data],{type:"application/json"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");
-  a.href=url;
-  a.download="pinklink-data.json";
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast("Data berhasil diekspor ✓");
+async function updateAuthUI(){
+  const {data:{session}}=await db.auth.getSession();
+  currentUser=session?.user||null;
+  const admin=!!currentUser;
+  document.getElementById("loginButton").style.display=admin?"none":"inline-block";
+  document.getElementById("logoutButton").style.display=admin?"inline-block":"none";
+  document.getElementById("addButton").style.display=admin?"inline-block":"none";
+  document.getElementById("adminMenu").style.display=admin?"block":"none";
+  document.getElementById("profile").textContent=admin?(currentUser.email?.charAt(0).toUpperCase()||"A"):"👤";
+  document.getElementById("welcomeText").textContent=admin?`Mode Admin • ${currentUser.email}`:"Mode Pengunjung • hanya dapat melihat dan membuka link.";
+  renderLinks();
 }
 
-async function importData(event){
-  const file=event.target.files[0];
-  if(!file) return;
+function openLogin(){document.getElementById("loginOverlay").classList.add("show");document.getElementById("loginError").style.display="none";document.getElementById("loginEmail").focus();}
+function closeLogin(){document.getElementById("loginOverlay").classList.remove("show");}
 
-  const reader=new FileReader();
-  reader.onload=async function(e){
-    try{
-      const imported=JSON.parse(e.target.result);
-      if(!Array.isArray(imported)) throw new Error("Format JSON tidak valid");
+document.getElementById("loginForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const email=document.getElementById("loginEmail").value.trim(),password=document.getElementById("loginPassword").value;
+  const err=document.getElementById("loginError"),btn=document.getElementById("loginSubmit");
+  btn.disabled=true;btn.textContent="Login...";
+  const {error}=await db.auth.signInWithPassword({email,password});
+  btn.disabled=false;btn.textContent="Login";
+  if(error){err.textContent="Email atau password salah.";err.style.display="block";return;}
+  closeLogin();showToast("Login berhasil ✓");await updateAuthUI();await loadLinks();
+});
 
-      const clean=imported.map(x=>({
-        name:String(x.name||"Tanpa Nama").trim(),
-        url:String(x.url||"").trim(),
-        category:["Canva","Dokumen","Website","Video","Lainnya"].includes(x.category)?x.category:"Lainnya",
-        description:String(x.description||"").trim(),
-        favorite:Boolean(x.favorite)
-      })).filter(x=>x.url);
+async function logout(){const {error}=await db.auth.signOut();if(error){showToast("Gagal logout");return;}currentUser=null;favoriteOnly=false;showAll();await updateAuthUI();await loadLinks();showToast("Berhasil logout");}
 
-      if(!clean.length) throw new Error("Tidak ada data valid");
+document.getElementById("linkForm").addEventListener("submit",async e=>{
+  e.preventDefault();if(!currentUser){openLogin();return;}
+  const id=document.getElementById("editId").value;
+  const data={name:document.getElementById("linkName").value.trim(),url:document.getElementById("linkUrl").value.trim(),category:document.getElementById("linkCategory").value,description:document.getElementById("linkDescription").value.trim()};
+  const btn=document.getElementById("saveButton");btn.disabled=true;btn.textContent="Menyimpan...";
+  try{
+    if(id){const {error}=await db.from("links").update(data).eq("id",Number(id));if(error)throw error;showToast("Link berhasil diperbarui ✓");}
+    else{const {error}=await db.from("links").insert({...data,favorite:false,user_id:currentUser.id});if(error)throw error;showToast("Link berhasil ditambahkan ✓");}
+    closeModal();await loadLinks();
+  }catch(err){console.error(err);showToast("Gagal menyimpan. Pastikan akun adalah pemilik.");}
+  finally{btn.disabled=false;btn.textContent="Simpan Link";}
+});
 
-      const {error}=await db.from("links").insert(clean);
-      if(error) throw error;
+function openModal(){if(!currentUser){openLogin();return;}document.getElementById("modalOverlay").classList.add("show");document.getElementById("modalTitle").textContent="Tambah Link";document.getElementById("linkForm").reset();document.getElementById("editId").value="";}
+function closeModal(){document.getElementById("modalOverlay").classList.remove("show");}
+function closeModalOutside(e){if(e.target.id==="modalOverlay")closeModal();}
+function editLink(id){if(!currentUser){openLogin();return;}const link=links.find(x=>Number(x.id)===Number(id));if(!link)return;document.getElementById("modalOverlay").classList.add("show");document.getElementById("modalTitle").textContent="Edit Link";document.getElementById("editId").value=link.id;document.getElementById("linkName").value=link.name||"";document.getElementById("linkUrl").value=link.url||"";document.getElementById("linkCategory").value=link.category||"Lainnya";document.getElementById("linkDescription").value=link.description||"";}
+async function deleteLink(id){if(!currentUser){openLogin();return;}const link=links.find(x=>Number(x.id)===Number(id));if(!link||!confirm(`Hapus "${link.name}"?`))return;const {error}=await db.from("links").delete().eq("id",Number(id));if(error){showToast("Tidak dapat menghapus link");return;}showToast("Link berhasil dihapus ✓");await loadLinks();}
+async function toggleFavorite(id){if(!currentUser){openLogin();return;}const link=links.find(x=>Number(x.id)===Number(id));if(!link)return;const {error}=await db.from("links").update({favorite:!link.favorite}).eq("id",Number(id));if(error){showToast("Tidak dapat mengubah favorit");return;}await loadLinks();}
+function openLink(encoded){const url=safeUrl(decodeURIComponent(encoded));if(url==="#")return showToast("URL tidak valid");window.open(url,"_blank","noopener,noreferrer");}
+async function copyLink(encoded){try{await navigator.clipboard.writeText(decodeURIComponent(encoded));showToast("Link berhasil disalin ✓");}catch{showToast("Gagal menyalin link");}}
+function searchLinks(){renderLinks();}
+function filterCategory(c){currentFilter=c;favoriteOnly=false;document.getElementById("sectionTitle").textContent=c==="Semua"?"Semua Link":c;document.getElementById("categoryFilter").value=c;renderLinks();closeSidebarMobile();}
+function filterBySelect(){const c=document.getElementById("categoryFilter").value;currentFilter=c;favoriteOnly=false;document.getElementById("sectionTitle").textContent=c==="Semua"?"Semua Link":c;renderLinks();}
+function showAll(){currentFilter="Semua";favoriteOnly=false;document.getElementById("sectionTitle").textContent="Semua Link";document.getElementById("categoryFilter").value="Semua";renderLinks();closeSidebarMobile();}
+function showFavorites(){if(!currentUser){openLogin();return;}currentFilter="Semua";favoriteOnly=true;document.getElementById("sectionTitle").textContent="Link Favorit";renderLinks();closeSidebarMobile();}
+function exportData(){if(!currentUser){openLogin();return;}const blob=new Blob([JSON.stringify(links,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="pinklink-data.json";a.click();showToast("Data berhasil diekspor ✓");}
+async function importData(event){if(!currentUser){openLogin();return;}const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=async e=>{try{const arr=JSON.parse(e.target.result);if(!Array.isArray(arr))throw Error();const clean=arr.map(x=>({name:String(x.name||"Tanpa Nama"),url:String(x.url||""),category:["Canva","Dokumen","Website","Video","Lainnya"].includes(x.category)?x.category:"Lainnya",description:String(x.description||""),favorite:Boolean(x.favorite),user_id:currentUser.id})).filter(x=>x.url);const {error}=await db.from("links").insert(clean);if(error)throw error;showToast(`${clean.length} link berhasil diimport ✓`);await loadLinks();}catch(err){console.error(err);showToast("Import gagal");}event.target.value="";};reader.readAsText(file);}
+function showToast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>t.classList.remove("show"),2500);}
+function toggleSidebar(){document.getElementById("sidebar").classList.toggle("open");}function closeSidebarMobile(){document.getElementById("sidebar").classList.remove("open");}
+function toggleDarkMode(){document.body.classList.toggle("dark-mode");localStorage.setItem("pinklinkDark",document.body.classList.contains("dark-mode")?"1":"0");}
+if(localStorage.getItem("pinklinkDark")==="1")document.body.classList.add("dark-mode");
 
-      showToast(`${clean.length} link berhasil diimport ✓`);
-      await loadLinks();
-    }catch(error){
-      console.error(error);
-      showToast("File JSON tidak valid atau gagal diimport");
-    }finally{
-      event.target.value="";
-    }
-  };
-  reader.readAsText(file);
-}
-
-function showToast(message){
-  const toast=document.getElementById("toast");
-  toast.textContent=message;
-  toast.classList.add("show");
-  clearTimeout(window.toastTimer);
-  window.toastTimer=setTimeout(()=>toast.classList.remove("show"),2500);
-}
-
-function toggleSidebar(){
-  document.getElementById("sidebar").classList.toggle("open");
-}
-
-function closeSidebarMobile(){
-  document.getElementById("sidebar").classList.remove("open");
-}
-
-function toggleDarkMode(){
-  document.body.classList.toggle("dark-mode");
-  localStorage.setItem("pinklinkDark",document.body.classList.contains("dark-mode")?"1":"0");
-  showToast("Mode tampilan diubah");
-}
-
-if(localStorage.getItem("pinklinkDark")==="1"){
-  document.body.classList.add("dark-mode");
-}
-
-/* Mulai mengambil data dari Supabase */
-loadLinks();
+db.auth.onAuthStateChange(async()=>{await updateAuthUI();});
+(async()=>{await updateAuthUI();await loadLinks();})();
 </script>
 </body>
 </html>
